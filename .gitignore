@@ -1,0 +1,76 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+
+# Build results
+[Bb]uild/
+[Bb]in/
+[Oo]bj/
+Debug/
+Release/
+x64/
+x86/
+*.obj
+*.pdb
+*.idb
+*.ilk
+*.log
+*.tlog
+*.cachefile
+*.pch
+*.aps
+*.ncb
+*.sbr
+*.sdf
+*.ipch
+
+# CMake files (if using CMake)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+build/
+out/
+
+# External dependencies (optional — adjust if you want to keep them)
+External/
+
+# Installer logs
+*.msi
+*.msm
+*.cab
+
+# Temporary files
+*~ 
+*.tmp
+*.bak
+
+# Mac OS & Linux temp files (just in case)
+.DS_Store
+Thumbs.db
+
+# Visual Studio Code
+.vscode/
+
+# Git merge files
+*.orig
+
+# Compiled dynamic libraries (if used)
+*.dll
+*.lib
+*.exp
+
+# Shader binaries (if compiled)
+*.spv
+
+# Ignore OpenGL-specific temp assets (if any)
+*.gltf.cache/
+*.glslcache/
+
+# Optional: Ignore your personal screenshots, if saved to the project
+screenshots/
