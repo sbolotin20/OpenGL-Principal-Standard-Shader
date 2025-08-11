@@ -10,11 +10,15 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "External/stb_image.h"
 
-
-// settings
+// ─────────────────────────────────────────────
+// Window Settings
+// ─────
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
+// ─────────────────────────────────────────────
+// Helper Functions: Load Shader Files and Compile Shaders
+// 
 static std::string read_shader_file(const char* shader_file)
 {
     std::ifstream file(shader_file);
@@ -74,19 +78,19 @@ GLuint create_shader_program(GLuint vertex_shader, GLuint frag_shader) {
     return program;
 }
 
-
+// ─────────────────────────────────────────────
+// Main
+//
 int main() {
     std::cout << "OpenGL project is running!" << std::endl;
-
     std::cout << "Working directory: " << std::filesystem::current_path() << std::endl;
 
-    // Initialize GLFW
+    // ------ Initialize GLFW and Create Window ------
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // glfw window creation
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
     if (window == NULL) {
         std::cout << "Failed to create GLFW window" << std::endl;
@@ -95,26 +99,25 @@ int main() {
     }
     glfwMakeContextCurrent(window);
 
-    // Load OpenGL functions with GLAD
+    // ----- Load OpenGL functions with GLAD -----
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD\n";
         return -1;
     }
 
-    // read in Vertex Shader
+    // ----- Compile and Link Shaders ------
     std::string vertexSource = read_shader_file("shaders/basic.vert");
-    GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER, vertexSource.c_str());
-   
-    // read in Fragment Shader
     std::string fragSource = read_shader_file("shaders/basic.frag");
-    GLuint frag_shader = compile_shader(GL_FRAGMENT_SHADER, fragSource.c_str());
 
-    // link shader program 
+    GLuint vertex_shader = compile_shader(GL_VERTEX_SHADER, vertexSource.c_str());
+    GLuint frag_shader = compile_shader(GL_FRAGMENT_SHADER, fragSource.c_str());
     GLuint shader_program = create_shader_program(vertex_shader, frag_shader);
+
+    // Set sampler2D uniform to use texture unit 0
     glUseProgram(shader_program);
     glUniform1i(glGetUniformLocation(shader_program, "tex"), 0); // 0 = GL_TEXTURED
 
-    // Define triangle vertices (normalized device coordinates) and texture coords (uv)
+    // ----- Set up Vertex Data (Position + UV) -----
     float vertices[] = {
         // positions         // texture coords
         -0.5f, -0.5f, 0.0f,  0.0f, 0.0f,
@@ -123,14 +126,15 @@ int main() {
     };
 
     GLuint VAO; // Vertex Array Object: blueprint of how OpenGL should handle vertex data later in rendering
-    glGenVertexArrays(1, &VAO); // generate 1 VAO
-    glBindVertexArray(VAO);  // bind it (make it active)
-
     GLuint VBO; // Vertex Buffer Object: holds actual vertex data (like triangle positions)
+    glGenVertexArrays(1, &VAO); // generate 1 VAO
     glGenBuffers(1, &VBO); // create a buffer ID
+
+    glBindVertexArray(VAO);  // bind it (make it active)
     glBindBuffer(GL_ARRAY_BUFFER, VBO); // bind the buffer (target = array buffer)
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
+    // position attribute (location = 0)
     glVertexAttribPointer(
         0,                // index (matches "layout (location = 0)" in shader)
         3,                // size (vec3 = 3 floats)
@@ -140,7 +144,8 @@ int main() {
         (void*)0          // offset (start at beginning of array)
     );
     glEnableVertexAttribArray(0);  // enable that vertex attribute
-    
+
+    // texture coordinate attribute (location = 1)
     glVertexAttribPointer(
         1,                // index (matches "layout (location = 0)" in shader)
         2,                // size (vec3 = 3 floats)
@@ -151,12 +156,10 @@ int main() {
     );
     glEnableVertexAttribArray(1);  // enable that vertex attribute
 
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f); // dark gray background
-
-    // stbi texture
-    int width, height, nrChannels; // nrChannels = number of color channels 
+    // ---- Load Texture -----
     stbi_set_flip_vertically_on_load(true);
 
+    int width, height, nrChannels; // nrChannels = number of color channels 
     unsigned char* data = stbi_load("texture.png", &width, &height, &nrChannels, 0); // stores pixel data in row-major order
     if (!data) {
         std::cout << "Failed to load texture!" << std::endl;
@@ -167,7 +170,7 @@ int main() {
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
     
-    // define how OpenGL samples the texture when UVs are scaled or go out of bounds
+    // define how OpenGL samples the texture when UVs are scaled or go out of bounds (texture sampling and wrapping behavior)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -189,10 +192,11 @@ int main() {
     );
     glGenerateMipmap(GL_TEXTURE_2D); // smaller versions of image when texture is far away
     
-    stbi_image_free(data); // don't need original pixel array anymore - on the GPU now
+    stbi_image_free(data); // free CPU-side memeory (on GPU now)
 
+    // ---- Render loop ----
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f); // dark gray background
 
-    // render loop
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT);     // clear the screen
 
@@ -206,11 +210,10 @@ int main() {
         glfwPollEvents();                 // handle input/window events
     }
 
-    // clean up GPU resources
+    // ---- Clean up GPU resources -----
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
     glfwTerminate();
-
 
     return 0;
 }
