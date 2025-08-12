@@ -98,12 +98,12 @@ int main() {
         return -1;
     }
     glfwMakeContextCurrent(window);
-
-    // ----- Load OpenGL functions with GLAD -----
+     // ----- Load OpenGL functions with GLAD -----
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD\n";
         return -1;
     }
+    glViewport(0,0,SCR_WIDTH,SCR_HEIGHT);
 
     // ----- Compile and Link Shaders ------
     std::string vertexSource = read_shader_file("shaders/basic.vert");
@@ -115,7 +115,6 @@ int main() {
 
     // Set sampler2D uniform to use texture unit 0
     glUseProgram(shader_program);
-    glUniform1i(glGetUniformLocation(shader_program, "tex"), 0); // 0 = GL_TEXTURED
 
     // ----- Set up Vertex Data (Position + UV) -----
     float vertices[] = {
@@ -147,8 +146,8 @@ int main() {
 
     // texture coordinate attribute (location = 1)
     glVertexAttribPointer(
-        1,                // index (matches "layout (location = 0)" in shader)
-        2,                // size (vec3 = 3 floats)
+        1,                // index (matches "layout (location = 1)" in shader)
+        2,                // size (vec2 = 2 floats)
         GL_FLOAT,         // type
         GL_FALSE,         // normalize?
         5 * sizeof(float),// stride (distance between sets of attributes)
@@ -156,6 +155,13 @@ int main() {
     );
     glEnableVertexAttribArray(1);  // enable that vertex attribute
 
+    // shader uniforms
+    int useBaseColorTex = glGetUniformLocation(shader_program, "useBaseColorTex");
+    int baseColorTint = glGetUniformLocation(shader_program, "baseColorTint");
+    int baseColorTex = glGetUniformLocation(shader_program, "baseColorTex");
+    glUniform1i(useBaseColorTex, 1);     
+    glUniform3f(baseColorTint, 0.1, 0.2, 0.7);
+    glUniform1i(baseColorTex, 0);
     // ---- Load Texture -----
     stbi_set_flip_vertically_on_load(true);
 
@@ -203,7 +209,10 @@ int main() {
         glUseProgram(shader_program);     // activate your shader
         glActiveTexture(GL_TEXTURE0); // activate texture unit 0
         glBindTexture(GL_TEXTURE_2D, texture); // bind texture to it
+        
+
         glBindVertexArray(VAO);           // bind the VAO (it remembers VBO + attributes)
+
         glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 vertices as one triangle
 
         glfwSwapBuffers(window);          // swap buffers
@@ -211,6 +220,8 @@ int main() {
     }
 
     // ---- Clean up GPU resources -----
+    glDeleteShader(vertex_shader);
+    glDeleteShader(frag_shader);
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
     glfwTerminate();

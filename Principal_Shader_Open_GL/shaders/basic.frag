@@ -11,7 +11,7 @@ void main()
 {
     vec3 texColor = vec3(1.0);
     if (useBaseColorTex) {
-        texColor = texture(baseColorTex, texCoord).rbg;
+        texColor = texture(baseColorTex, texCoord).rgb;
     } 
     vec3 baseColor = texColor * baseColorTint;
     FragColor = vec4(baseColor, 1.0);
