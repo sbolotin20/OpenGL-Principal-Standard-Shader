@@ -197,10 +197,16 @@ int main() {
     int uLight_Color = glGetUniformLocation(shader_program, "uLight_Color");
     int uAmbient = glGetUniformLocation(shader_program, "uAmbient");
     int uLight_Position = glGetUniformLocation(shader_program, "uLight_Position");
+    int uCamera_Position = glGetUniformLocation(shader_program, "uCamera_Position");
+    int uSpecularColor = glGetUniformLocation(shader_program, "uSpecularColor");
+    int uRoughness = glGetUniformLocation(shader_program, "uRoughness");
     glUniform3f(uLight_Direction, normal_vec.x, normal_vec.y, normal_vec.z); // normalized direction    
     glUniform3f(uLight_Color, 1.0, 1.0, 1.0); // white light for testing
     glUniform3f(uAmbient, 0.05, 0.05, 0.05); // subtle global fill
     glUniform3f(uLight_Position, 0.8, 0.8, 0.7); // light position
+    glUniform3f(uCamera_Position, 0.0, 0.0, 1.0); // since triangle sits at z=0 and faces +z
+    glUniform3f(uSpecularColor, 1.0, 1.0, 1.0); 
+    glUniform1f(uRoughness, 0.4);
 
     // ---- Load Texture -----
     stbi_set_flip_vertically_on_load(true);
@@ -256,7 +262,7 @@ int main() {
         // animate light
         double time = glfwGetTime();
         float radius = 0.4f;
-        float height = 0.08f;
+        float height = 0.15f;
         glUniform3f(uLight_Position, radius * cos(time * 0.7), radius * sin(time * 0.7), height); // normalized direction 
 
         glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 vertices as one triangle
