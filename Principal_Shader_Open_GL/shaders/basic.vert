@@ -3,9 +3,12 @@ layout (location = 0) in vec3 aPos; // the position variable has attribute posit
 layout (location = 1) in vec2 aTexCoord; // the texture variable has attribute position 1
   
 out vec2 texCoord; // specify a texture output to the fragment shader
+out vec3 worldPos;
 
 void main()
 {
     gl_Position = vec4(aPos, 1.0); // see how we directly give a vec3 to vec4's constructor
     texCoord = vec2(aTexCoord);
+    // A point light needs each pixel’s position in world space so the fragment shader can compute a unique light direction per pixel
+    worldPos = aPos; 
 }

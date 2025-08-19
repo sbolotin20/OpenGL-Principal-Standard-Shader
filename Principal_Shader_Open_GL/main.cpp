@@ -6,6 +6,10 @@
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "External/stb_image.h"
@@ -19,6 +23,8 @@ const unsigned int SCR_HEIGHT = 600;
 // ─────────────────────────────────────────────
 // Helper Functions: Load Shader Files and Compile Shaders
 // 
+
+
 static std::string read_shader_file(const char* shader_file)
 {
     std::ifstream file(shader_file);
@@ -78,6 +84,20 @@ GLuint create_shader_program(GLuint vertex_shader, GLuint frag_shader) {
     return program;
 }
 
+glm::vec3 normalize_vec(float x, float y, float z) {
+    float len = sqrtf(x*x + y*y + z*z);
+    if (len > 0.0f) {
+        x /= len;
+        y /= len;
+        z /= len;
+    } else {
+        // fallback if someone passes (0,0,0)
+        x = 0.0f; y = 0.0f; z = 1.0f;
+    }
+    return glm::vec3(x, y, z);
+}
+
+
 // ─────────────────────────────────────────────
 // Main
 //
@@ -103,7 +123,11 @@ int main() {
         std::cerr << "Failed to initialize GLAD\n";
         return -1;
     }
-    glViewport(0,0,SCR_WIDTH,SCR_HEIGHT);
+
+    int w, h;
+    glfwGetFramebufferSize(window, &w, &h);
+    glViewport(0, 0, w, h);
+
 
     // ----- Compile and Link Shaders ------
     std::string vertexSource = read_shader_file("shaders/basic.vert");
@@ -155,13 +179,29 @@ int main() {
     );
     glEnableVertexAttribArray(1);  // enable that vertex attribute
 
-    // shader uniforms
-    int useBaseColorTex = glGetUniformLocation(shader_program, "useBaseColorTex");
-    int baseColorTint = glGetUniformLocation(shader_program, "baseColorTint");
-    int baseColorTex = glGetUniformLocation(shader_program, "baseColorTex");
-    glUniform1i(useBaseColorTex, 1);     
-    glUniform3f(baseColorTint, 0.1, 0.2, 0.7);
-    glUniform1i(baseColorTex, 0);
+    // ---- Texture/material uniforms -----
+    int uMat_useBaseColorTex = glGetUniformLocation(shader_program, "useBaseColorTex");
+    int uMat_baseColorTint = glGetUniformLocation(shader_program, "baseColorTint");
+    int uMat_baseColorTex = glGetUniformLocation(shader_program, "baseColorTex");
+    glUniform1i(uMat_useBaseColorTex, 1);     
+    glUniform3f(uMat_baseColorTint, 1.0, 0.0, 0.0);
+    glUniform1i(uMat_baseColorTex, 0);
+
+    // ---- Lighting uniforms ----
+
+    // 1. choose test light direction in WORLD space (surface -> light)
+    glm::vec3 normal_vec = normalize_vec(1.0f, 1.0f, 0.0f);
+
+    // 3. cache uniform lighting location uniforms
+    int uLight_Direction = glGetUniformLocation(shader_program, "uLight_Direction");
+    int uLight_Color = glGetUniformLocation(shader_program, "uLight_Color");
+    int uAmbient = glGetUniformLocation(shader_program, "uAmbient");
+    int uLight_Position = glGetUniformLocation(shader_program, "uLight_Position");
+    glUniform3f(uLight_Direction, normal_vec.x, normal_vec.y, normal_vec.z); // normalized direction    
+    glUniform3f(uLight_Color, 1.0, 1.0, 1.0); // white light for testing
+    glUniform3f(uAmbient, 0.05, 0.05, 0.05); // subtle global fill
+    glUniform3f(uLight_Position, 0.8, 0.8, 0.7); // light position
+
     // ---- Load Texture -----
     stbi_set_flip_vertically_on_load(true);
 
@@ -209,9 +249,15 @@ int main() {
         glUseProgram(shader_program);     // activate your shader
         glActiveTexture(GL_TEXTURE0); // activate texture unit 0
         glBindTexture(GL_TEXTURE_2D, texture); // bind texture to it
-        
+        glUniform3f(uMat_baseColorTint, 0.0, 1.0, 0.0);
 
         glBindVertexArray(VAO);           // bind the VAO (it remembers VBO + attributes)
+
+        // animate light
+        double time = glfwGetTime();
+        float radius = 0.4f;
+        float height = 0.08f;
+        glUniform3f(uLight_Position, radius * cos(time * 0.7), radius * sin(time * 0.7), height); // normalized direction 
 
         glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 vertices as one triangle
 
@@ -222,6 +268,7 @@ int main() {
     // ---- Clean up GPU resources -----
     glDeleteShader(vertex_shader);
     glDeleteShader(frag_shader);
+    glDeleteTextures(1, &texture);
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
     glfwTerminate();
