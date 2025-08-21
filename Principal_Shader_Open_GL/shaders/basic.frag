@@ -59,6 +59,12 @@ void main()
     vec3 diffuseColor = baseColor * (1.0 - uMetallic); 
     vec3 diffuse = (1.0 - F) * diffuseColor * uLight_Color * NdotL;
     vec3 specular = F * specPow * uLight_Color; 
+
+    // Optional distance attentuation for point lights
+    float d = length(uLight_Position - worldPos);
+    float att = 1.0 / (1.0 + 0.09*d + 0.032*d*d); // most common falloff model
+    diffuse *=  att; // ensures brightness fades as light moves away
+    specular *= att; // ensures brightness fades as light moves away
     
     // 9. Ambient term (small) tints the surface uniformly
     vec3 ambient = baseColor * uAmbient;
