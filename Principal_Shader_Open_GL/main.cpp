@@ -193,24 +193,36 @@ int main() {
     glm::vec3 normal_vec = normalize_vec(1.0f, 1.0f, 0.0f);
 
     // 3. cache uniform lighting location uniforms
-    int uLight_Direction = glGetUniformLocation(shader_program, "uLight_Direction");
-    int uLight_Color = glGetUniformLocation(shader_program, "uLight_Color");
-    int uAmbient = glGetUniformLocation(shader_program, "uAmbient");
-    int uLight_Position = glGetUniformLocation(shader_program, "uLight_Position");
-    int uCamera_Position = glGetUniformLocation(shader_program, "uCamera_Position");
-    int uSpecularColor = glGetUniformLocation(shader_program, "uSpecularColor");
-    int uRoughness = glGetUniformLocation(shader_program, "uRoughness");
-    int uMetallic = glGetUniformLocation(shader_program, "uMetallic");
-    int uDielectricF0 = glGetUniformLocation(shader_program, "uDielectricF0");
-    glUniform3f(uLight_Direction, normal_vec.x, normal_vec.y, normal_vec.z); // normalized direction    
-    glUniform3f(uLight_Color, 1.0, 1.0, 1.0); // white light for testing
-    glUniform3f(uAmbient, 0.05, 0.05, 0.05); // subtle global fill
-    glUniform3f(uLight_Position, 0.8, 0.8, 0.7); // light position
-    glUniform3f(uCamera_Position, 0.0, 0.0, 1.0); // since triangle sits at z=0 and faces +z
-    glUniform3f(uSpecularColor, 1.0, 1.0, 1.0); 
-    glUniform1f(uRoughness, 0.2);
-    glUniform1f(uMetallic, 0.6);
-    glUniform3f(uDielectricF0, 0.4, 0.4, 0.4); 
+    GLint uLightType      = glGetUniformLocation(shader_program, "uLightType");
+    GLint uLightPos       = glGetUniformLocation(shader_program, "uLight_Position");
+    GLint uLightColor     = glGetUniformLocation(shader_program, "uLight_Color");
+    GLint uAmbient        = glGetUniformLocation(shader_program, "uAmbient");
+    GLint uDirDir         = glGetUniformLocation(shader_program, "uDir_Direction");
+    GLint uSpotCosInner   = glGetUniformLocation(shader_program, "uSpotCosInner");
+    GLint uSpotCosOuter   = glGetUniformLocation(shader_program, "uSpotCosOuter");
+    GLint uCamPos         = glGetUniformLocation(shader_program, "uCamera_Position");
+
+    GLint uUseBaseTex     = glGetUniformLocation(shader_program, "useBaseColorTex");
+    GLint uBaseTex        = glGetUniformLocation(shader_program, "baseColorTex");
+    GLint uBaseTint       = glGetUniformLocation(shader_program, "baseColorTint");
+    GLint uRoughness      = glGetUniformLocation(shader_program, "uRoughness");
+    GLint uMetallic       = glGetUniformLocation(shader_program, "uMetallic");
+    GLint uDielectricF0   = glGetUniformLocation(shader_program, "uDielectricF0");
+    
+    glUniform1i(uLightType, 0);                     // 0=Directional, 1=Point, 2=Spot
+    glUniform3f(uLightColor, 1.0f,1.0f,1.0f);
+    glUniform3f(uAmbient,    0.05f,0.05f,0.05f);
+    glUniform3f(uDirDir,     0.5f,-1.0f,0.5f);     // used for directional/spot (normalized in shader is fine too)
+    glUniform1f(uSpotCosInner, cosf(glm::radians(15.0f)));
+    glUniform1f(uSpotCosOuter, cosf(glm::radians(25.0f)));
+    glUniform3f(uCamPos, 0.0f, 0.0f, 1.0f);
+
+    glUniform1i(uUseBaseTex, 1);
+    glUniform1i(uBaseTex, 0);                       // sampler uses texture unit 0
+    glUniform3f(uBaseTint, 1.0f,1.0f,1.0f);
+    glUniform1f(uRoughness, 0.4f);
+    glUniform1f(uMetallic,  0.0f);
+    glUniform3f(uDielectricF0, 0.04f,0.04f,0.04f);
 
     // ---- Load Texture -----
     stbi_set_flip_vertically_on_load(true);
@@ -263,11 +275,21 @@ int main() {
 
         glBindVertexArray(VAO);           // bind the VAO (it remembers VBO + attributes)
 
-        // animate light
+        // --- Animation Light ---
+        // uLightType = 1 -> Point
         double time = glfwGetTime();
         float radius = 0.4f;
         float height = 0.15f;
-        glUniform3f(uLight_Position, radius * cos(time * 0.7), radius * sin(time * 0.7), height); // normalized direction 
+       //glUniform3f(uLightPos, radius * cos(time * 0.7), radius * sin(time * 0.7), height); // normalized direction 
+
+        // uLightType = 0 -> directional
+        // Animate elevation angle with time
+        float elev = 0.15f + 0.65f * 0.5f * (1.0f + sin(time * 0.7f));
+        // Convert elevation into a direction vector
+        glm::vec3 dir = glm::normalize(glm::vec3(0.0f, -cos(elev), sin(elev)));
+        // Send to shader
+        glUniform3f(uDirDir, dir.x, dir.y, dir.z);
+
 
         glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 vertices as one triangle
 
