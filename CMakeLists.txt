@@ -22,6 +22,12 @@ set(EXT_INCLUDE ${EXT_DIR}/include)
 add_executable(${PROJECT_NAME}
   ${SRC_DIR}/main.cpp
   ${EXT_DIR}/glad.c           # compile glad!
+  ${SRC_DIR}/main.cpp
+  ${EXT_DIR}/glad.c
+  ${SRC_DIR}/shader_utils.cpp
+  ${SRC_DIR}/mesh_utils.cpp
+  ${SRC_DIR}/texture_utils.cpp
+  ${SRC_DIR}/uniforms.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -57,3 +63,4 @@ if(TEX)
       $<TARGET_FILE_DIR:${PROJECT_NAME}>
   )
 endif()
+
