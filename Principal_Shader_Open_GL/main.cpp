@@ -23,11 +23,24 @@
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
+// globals
+GLuint baseColorTextureID;
+GLuint normalMapTextureID;
+GLuint roughnessTextureID;
+GLuint metallicTextureID;
+
 // ─────────────────────────────────────────────
 // Main
 int main() {
     std::cout << "OpenGL project is running!" << std::endl;
     std::cout << "Working directory: " << std::filesystem::current_path() << std::endl;
+
+
+    // Check if texture files exist
+    std::cout << "Checking for textures:" << std::endl;
+    std::cout << "  base_color.jpg exists: " << std::filesystem::exists("textures/base_color.jpg") << std::endl;
+    std::cout << "  normal_map.png exists: " << std::filesystem::exists("textures/normal_map.png") << std::endl;
+    std::cout << "  roughness_map.png exists: " << std::filesystem::exists("textures/roughness_map.png") << std::endl;
 
     // ------ Initialize GLFW and Create Window ------
     glfwInit();
@@ -62,27 +75,37 @@ int main() {
 
     glUseProgram(shader_program);
 
+    
+
     // ----- Set up Vertex Data (Position + UV) -----
-    Mesh mesh = createTriangle();
+    Mesh mesh = createQuad();
     GLuint VAO = mesh.VAO;
 
     // ---- Load Texture -----
-    GLuint texture = LoadTexture2D("texture.png");
+    baseColorTextureID = LoadTexture2D("textures/base_color.jpg");
+    normalMapTextureID = LoadTexture2D("textures/normal_map.png");
+    roughnessTextureID = LoadTexture2D("textures/roughness_map.png");
+    
+    
 
-    // ---- Material and Lighting Setup -----
     // ---- Material and Lighting Setup -----
     LightingUniforms lightUniforms = getLightingUniforms(shader_program);
     MaterialUniforms matUniforms = getMaterialUniforms(shader_program);
-
+    VertexUniforms vertUniforms = getVertexUniforms(shader_program);
 
     // ---- Set initial Material and Lighting Values -----
     glUniform1i(matUniforms.uUseBaseTex, 1);
     glUniform1i(matUniforms.uBaseTex, 0);
     glUniform3f(matUniforms.uBaseTint, 1.0f, 1.0f, 1.0f);
-    glUniform1f(matUniforms.uRoughness, 0.4f);
+    glUniform1f(matUniforms.uRoughness, 0.8f);
     glUniform1f(matUniforms.uMetallic, 0.0f);
     glUniform3f(matUniforms.uDielectricF0, 0.04f, 0.04f, 0.04f);
-
+    glUniform1i(matUniforms.uNormalTex, 1); // use texture unit 1
+    glUniform1i(matUniforms.uUseNormalTex, true); // toggle normal mapping on 
+    glUniform1i(matUniforms.uRoughnessMap, 2);
+    glUniform1i(matUniforms.uUseRoughnessMap, 1);
+    glUniform1i(matUniforms.uMetallicMap, 3);
+    glUniform1i(matUniforms.uUseMetallicMap, 0);
 
     glUniform1i(lightUniforms.uLightType, 0);
     glUniform3f(lightUniforms.uLightColor, 1.0f, 1.0f, 1.0f);
@@ -91,25 +114,67 @@ int main() {
     glUniform1f(lightUniforms.uSpotCosOuter, cosf(glm::radians(25.0f)));
     glUniform3f(lightUniforms.uCamPos, 0.0f, 0.0f, 1.0f);
 
+    glm::mat4 projection = glm::perspective(
+        glm::radians(45.0f),              // FieldOfView: 45° is natural, like human vision
+        (float)SCR_WIDTH / SCR_HEIGHT,    // Aspect: Must match window or things stretch
+        0.1f,                             // Near: Objects closer than 0.1 units get clipped
+        100.0f                            // Far: Objects beyond 100 units disappear
+    );
+    glUniformMatrix4fv(vertUniforms.projectionMatrix, 1, GL_FALSE, glm::value_ptr(projection));
+
     // ---- Render loop ----
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f); // dark gray background
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);  // Disable culling so both sides of the quad are drawn
+
 
     while (!glfwWindowShouldClose(window)) {
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader_program);
+
+        // bind base color texture
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
+        glBindTexture(GL_TEXTURE_2D, baseColorTextureID);  // make sure you defined this
+
+        // bind normal map texture
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, normalMapTextureID);
+
+        // bind roughness map texture
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, roughnessTextureID);
+
+         // bind metallic map texture
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, metallicTextureID);
+
+        glUniform1i(glGetUniformLocation(shader_program, "useNormalMap"), true);
+
+
 
         // --- Animation Light ---
         // --- Animate Light Direction ---
-        double time = glfwGetTime();
+        float time = glfwGetTime();
         float elev = 0.15f + 0.65f * 0.5f * (1.0f + sin(time * 0.7f));
         glm::vec3 dir = glm::normalize(glm::vec3(0.0f, -cos(elev), sin(elev)));
         glUniform3f(lightUniforms.uDirDir, dir.x, dir.y, dir.z);
 
-        glBindVertexArray(VAO); // bind the VAO (it remembers VBO + attributes)
-        glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 vertices as one triangle
+        // matrices
+        glm::mat4 model = glm::mat4(1.0f); // identity 
+        model = glm::rotate(model, time, glm::vec3(0.0f, 1.0f, 0.0f)); // spin around Y
+        glm::mat4 view = glm::lookAt(
+            glm::vec3(0.0f, 0.0f, 3.0f),  // Eye: Camera 3 units back on Z axis
+            glm::vec3(0.0f, 0.0f, 0.0f),  // Center: Looking at origin
+            glm::vec3(0.0f, 1.0f, 0.0f)   // Up: Y-axis is "up" (standard)
+        );
+
+        glUniformMatrix4fv(vertUniforms.modelMatrix, 1, GL_FALSE, glm::value_ptr(model));
+        glUniformMatrix4fv(vertUniforms.viewMatrix, 1, GL_FALSE, glm::value_ptr(view));
+
+        mesh.draw(); 
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -118,8 +183,11 @@ int main() {
     // ---- Clean up GPU resources -----
     glDeleteShader(vertex_shader);
     glDeleteShader(frag_shader);
-    glDeleteTextures(1, &texture);
-    glDeleteVertexArrays(1, &VAO);
+    glDeleteTextures(1, &baseColorTextureID);
+    glDeleteTextures(1, &normalMapTextureID);
+    glDeleteTextures(1, &roughnessTextureID);
+    glDeleteTextures(1, &metallicTextureID);
+    glDeleteVertexArrays(1, &mesh.VAO);
     glfwTerminate();
 
     return 0;

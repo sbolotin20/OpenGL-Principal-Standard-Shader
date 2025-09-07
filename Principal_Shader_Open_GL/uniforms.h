@@ -13,7 +13,6 @@ GLint uSpotCosOuter;
 GLint uCamPos;
 };
 
-
 struct MaterialUniforms {
 GLint uUseBaseTex;
 GLint uBaseTex;
@@ -21,8 +20,21 @@ GLint uBaseTint;
 GLint uRoughness;
 GLint uMetallic;
 GLint uDielectricF0;
+GLint uNormalTex;
+GLint uUseNormalTex;
+GLint uRoughnessMap;
+GLint uMetallicMap;
+GLint uUseRoughnessMap;
+GLint uUseMetallicMap;
+};
+
+struct VertexUniforms {
+GLint modelMatrix;
+GLint viewMatrix;
+GLint projectionMatrix;
 };
 
 
 LightingUniforms getLightingUniforms(GLuint program);
 MaterialUniforms getMaterialUniforms(GLuint program);
+VertexUniforms getVertexUniforms(GLuint program);

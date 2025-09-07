@@ -3,20 +3,20 @@ out vec4 FragColor;
   
 in vec2 texCoord; // the input variable from the vertex shader (same name and same type)  
 in vec3 worldPos; // position of each pixel on [triangle] in world space
+in vec3 fragTangent; 
+in vec3 fragNormal;
 
 // -- Lighting Uniforms (world space) --
-uniform vec3 uLight_Direction;   // assume normalized, lighting in world space, points from surface -> light 
 uniform vec3 uLight_Position;    // point light position (moves each frame)
 uniform vec3 uLight_Color;       // intensity/tint (linear RGB)
 uniform vec3 uAmbient;           // small constant fill (0 ~ 0.1)
 uniform vec3 uCamera_Position;   // camera position (to build view direction)
-uniform vec3 uSpecularColor;
 uniform int uLightType; // 0 = Directional, 1 = Point, 2 = Spot
 uniform vec3 uDir_Direction; // normalized (for directional and spot light)
 uniform float uSpotCosInner; // cos(innerAngle)
 uniform float uSpotCosOuter; // cos(outerAngle) >= inner
 
-// -- Material controls --
+// -- Material controls -- uniform floats are single value for entire surface
 uniform float uRoughness;   // [0..1] 0=glossy, 1=rough (map to shininess)
 uniform float uMetallic;    // [0..1] 0=dielectric, 1=metal
 uniform vec3 uDielectricF0; // ~4% base reflectance for plastics 
@@ -26,67 +26,152 @@ uniform sampler2D baseColorTex;   // Albedo/baseColor texture (linear or already
 uniform bool      useBaseColorTex;
 uniform vec3      baseColorTint;  // rgb tint in linear space (0..1)
 
+// -- Normal Mapping --
+uniform sampler2D normalMapTex;
+uniform bool uUseNormalTex;
+
+// -- Roughness and Metallic Texture Maps -- different value at each pixel
+uniform sampler2D roughnessMap;
+uniform bool useRoughnessMap;
+uniform sampler2D metallicMap;
+uniform bool useMetallicMap;
+
+float D_GGX(float NdotH, float roughness) {
+    float alpha = roughness * roughness;
+    float alpha2 = alpha * alpha;
+    float NdotH2 = NdotH * NdotH;  // More efficient than pow(NdotH, 2)
+    
+    float denom = NdotH2 * (alpha2 - 1.0) + 1.0;
+    denom = 3.14159265 * denom * denom;
+    
+    return alpha2 / max(denom, 0.001);  // Prevent division by zero
+}
+
+float G_SchlickGGX(float NdotV, float roughness) {
+    // Geometry function for one direction (either L or V)
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;  // for direct light
+    float G1 = NdotV / max((NdotV * (1 - k) + k), 0.001);
+    return G1;
+}
+
+float G_Smith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 0.0);
+    float G1_L = G_SchlickGGX(NdotL, roughness);  // Use NdotL here
+    float G1_V = G_SchlickGGX(NdotV, roughness);  // Use NdotV here
+    return G1_L * G1_V;  // Just multiply the two G terms
+}
+
 void main()
 {
-    // 1. Surface frame: constant normal (facing +Z)
-    vec3 N = normalize(vec3(0.0, 0.0, 1.0)); 
-    vec3 L; 
+    // ========== SURFACE PROPERTIES ==========
+    // Get base color from texture/tint
+    vec3 texColor = useBaseColorTex ? texture(baseColorTex, texCoord).rgb : vec3(1.0);
+    vec3 baseColor = texColor * baseColorTint;
+
+    // ======== Roughness/Metallic Mapping ======
+    float roughness = uRoughness; // Start with the uniform as a base/multiplier
+    if (useRoughnessMap) {
+        // Multiply by texture for spatial variation
+        roughness *= texture(roughnessMap, texCoord).r;
+    }
+    float metallic = uMetallic;
+    if (useMetallicMap) {
+        metallic *= texture(metallicMap, texCoord).r;
+    }
+    
+    // ========== NORMAL CALCULATION ==========
+    vec3 N = normalize(fragNormal);  // Start with vertex normal, not hardcoded!
+    
+    if (uUseNormalTex) {
+        // Decode normal map from [0,1] to [-1,1]
+        vec3 normalSample = texture(normalMapTex, texCoord).rgb * 2.0 - 1.0;
+        normalSample *= 1.5;
+        normalSample = normalize(normalSample);
+        
+        // Build TBN matrix to transform from tangent to world space
+        vec3 T = normalize(fragTangent);
+        vec3 B = normalize(cross(N, T));
+        mat3 TBN = mat3(T, B, N);
+        
+        // Apply normal map
+        N = normalize(TBN * normalSample);
+    }
+    
+    // ========== LIGHT CALCULATION ==========
+    vec3 L;
     float att = 1.0;
     float spot = 1.0;
-    // 2. Lighting/view directions (in world space, unit length)
-    if (uLightType == 0)  {
-        L = normalize(uDir_Direction); // no attenuation
-    } else if (uLightType == 1 || uLightType == 2) {
-        L = normalize(uLight_Position - worldPos); // L = light direction vector pointing from surface point -> light 
-        // point/spot: distance falloff
-        float d = length(uLight_Position - worldPos);
-        att = 1.0 / (1.0 + 0.09*d + 0.032*d*d); 
-    } 
-
-    if (uLightType == 2) {
-        // spot cone factor
-        float cosTheta = dot(-L, normalize(uDir_Direction));
-        float t = clamp((cosTheta - uSpotCosOuter)/(uSpotCosInner - uSpotCosOuter), 0.0, 1.0);
-        float spot = t*t*(3.0 -2.0*t); // smoothstep
+    
+    // Calculate light direction and attenuation based on light type
+    if (uLightType == 0) {
+        // Directional light
+        L = normalize(uDir_Direction);
+    } else {
+        // Point/Spot light
+        vec3 lightVec = uLight_Position - worldPos;
+        L = normalize(lightVec);
+        float d = length(lightVec);
+        att = 1.0 / (1.0 + 0.09*d + 0.032*d*d);
+        
+        if (uLightType == 2) {
+            // Spot light cone
+            float cosTheta = dot(-L, normalize(uDir_Direction));
+            float t = clamp((cosTheta - uSpotCosOuter)/(uSpotCosInner - uSpotCosOuter), 0.0, 1.0);
+            spot = t*t*(3.0 - 2.0*t);  // smoothstep
+        }
     }
-
-    vec3 V = normalize(uCamera_Position - worldPos); // V = camera position vector pointing from surface point -> camera
-    vec3 H = normalize(L + V); // H = half-vector between light and view
     
-    // 3. Roughness -> shininess (Blinn-Phong exponent) High shininess = tight lobe = low roughness
-    float shininess = mix(8.0, 2048.0, pow(1.0 - uRoughness, 2.0)); 
+    // ========== VIEW VECTORS ==========
+    vec3 V = normalize(uCamera_Position - worldPos);
+    vec3 H = normalize(L + V);
     
-    // 4. Base color (albedo). Texture is optional; multiply by tint
-    vec3 texColor = vec3(1.0);
-    if (useBaseColorTex) {
-        texColor = texture(baseColorTex, texCoord).rgb;
-    } 
-    vec3 baseColor = texColor * baseColorTint; 
-    
-    // 5. Specular base reflectance at normal indicidence (F0)
-    vec3 F0 = mix(uDielectricF0, baseColor, uMetallic); // specular base color - as uMetallic -> 1, specular color becomes base color
-    
-    // 6. Fresnel (Schlick approximation): more reflection at grazing angles
-    float VoH = max(dot(V, H), 0.0);
-    vec3 F = F0 + (1.0 - F0) * pow(1 - VoH, 5.0);
-
-    // 7. Lambert diffuse factor and Blinn-Phong spec power
+    // ========== DOT PRODUCTS (used multiple times) ==========
     float NdotL = max(dot(N, L), 0.0);
-    float specPow = pow(max(dot(N, H), 0.0), shininess);
-
-    // 8. Energy-aware split:
-    //    - Diffuse color vanishes as metallic -> 1 (metals have no diffuse)
-    //    - (1-F) reduces diffuse at grazing angles to conserve energy
-    //    - multiplying by att ensures brightness fades as light moves away
-    vec3 diffuseColor = baseColor * (1.0 - uMetallic); 
-    vec3 diffuse = (1.0 - F) * diffuseColor * uLight_Color *  att * spot * NdotL;
-    vec3 specular = F * specPow * uLight_Color * att * spot; 
-
-    // 9. Ambient term (small) tints the surface uniformly
-    vec3 ambient = baseColor * uAmbient;
-
-    // 10. Final composition (linear space)
-    vec3 finalColor = ambient + diffuse + specular;
-    FragColor = vec4(finalColor, 1.0);
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotH = max(dot(N, H), 0.0);
+    float VdotH = max(dot(V, H), 0.0);
     
-} 
+    // ========== MATERIAL PROPERTIES ==========
+    // F0: Base reflectance (dielectric ~4%, metals use base color)
+    vec3 F0 = mix(uDielectricF0, baseColor, metallic);
+    
+    // ========== BRDF COMPONENTS ==========
+    // Fresnel (F): Schlick approximation
+    vec3 F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
+    
+    // Distribution (D): GGX/Trowbridge-Reitz
+    float D = D_GGX(NdotH, roughness);
+    
+    // Geometry (G): Smith with Schlick-GGX
+    float G = G_Smith(N, V, L, roughness);
+    
+    // ========== LIGHTING CALCULATION ==========
+    // Cook-Torrance BRDF
+    vec3 numerator = D * G * F;
+    float denominator = max(4.0 * NdotL * NdotV, 0.001);
+    vec3 specular = numerator / denominator;
+    
+    // Energy conservation: kS = F, kD = 1 - kS
+    vec3 kS = F;  // Specular contribution
+   vec3 kD = vec3(1.0) - kS;  // This is (1.0 - F)
+    kD *= 1.0 - metallic;     // Remove diffuse from metals
+    vec3 irradiance = uLight_Color * att * spot * NdotL; // incoming light energy
+    vec3 Lo = (kD * baseColor / 3.14159265 + specular) * irradiance;
+
+
+    
+    // ========== FINAL COLOR ==========
+    vec3 ambient = baseColor * uAmbient;
+    vec3 color = ambient + Lo;
+
+    // ========== TONE MAPPING & GAMMA ==========
+    vec3 mapped = color * 2.0;  // Exposure boost
+    mapped = mapped / (mapped + vec3(1.0));  // Reinhard tone mapping
+    mapped = pow(mapped, vec3(1.0/2.2));  // Gamma correction
+
+    FragColor = vec4(mapped, 1.0);
+    
+    //FragColor = vec4(color, 1.0);
+}

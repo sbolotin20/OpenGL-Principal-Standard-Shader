@@ -48,13 +48,33 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     ${SRC_DIR}/shaders
     $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders
 )
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${SRC_DIR}/textures
+    $<TARGET_FILE_DIR:${PROJECT_NAME}>/textures
+)
 
-# texture.png (handle either location)
-if(EXISTS ${SRC_DIR}/texture.png)
-  set(TEX ${SRC_DIR}/texture.png)
-elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/texture.png)
-  set(TEX ${CMAKE_CURRENT_SOURCE_DIR}/texture.png)
+# Base color texture
+if(EXISTS ${SRC_DIR}/textures/base_color.jpg)
+  set(BASE_COLOR_TEX ${SRC_DIR}/textures/base_color.jpg)
+elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/textures/base_color.jpg)
+  set(BASE_COLOR_TEX ${CMAKE_CURRENT_SOURCE_DIR}/textures/base_color.jpg)
 endif()
+
+# Normal map texture
+if(EXISTS ${SRC_DIR}/textures/normal_map.png)
+  set(NORMAL_MAP_TEX ${SRC_DIR}/textures/normal_map.png)
+elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/textures/normal_map.png)
+  set(NORMAL_MAP_TEX ${CMAKE_CURRENT_SOURCE_DIR}/textures/normal_map.png)
+endif()
+
+# roughness map texture
+if(EXISTS ${SRC_DIR}/textures/roughness_map.png)
+  set(ROUGHNESS_MAP_TEX ${SRC_DIR}/textures/roughness_map.png)
+elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/textures/roughness_map.png)
+  set(ROUGHNESS_MAP_TEX ${CMAKE_CURRENT_SOURCE_DIR}/textures/roughness_map.png)
+endif()
+
 
 if(TEX)
   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

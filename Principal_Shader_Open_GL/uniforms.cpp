@@ -25,5 +25,20 @@ MaterialUniforms getMaterialUniforms(GLuint program) {
     u.uRoughness = glGetUniformLocation(program, "uRoughness");
     u.uMetallic = glGetUniformLocation(program, "uMetallic");
     u.uDielectricF0 = glGetUniformLocation(program, "uDielectricF0");
+    u.uNormalTex = glGetUniformLocation(program, "uNormalTex");
+    u.uUseNormalTex = glGetUniformLocation(program, "uUseNormalTex");
+    u.uRoughnessMap = glGetUniformLocation(program, "roughnessMap");
+    u.uMetallicMap = glGetUniformLocation(program, "metallicMap");
+    u.uUseRoughnessMap = glGetUniformLocation(program, "useRoughnessMap");
+    u.uUseMetallicMap = glGetUniformLocation(program, "useMetallicMap");
     return u;
 }
+
+VertexUniforms getVertexUniforms(GLuint program) {
+    VertexUniforms u;
+    u.modelMatrix = glGetUniformLocation(program, "modelMatrix");
+    u.viewMatrix = glGetUniformLocation(program, "viewMatrix");
+    u.projectionMatrix = glGetUniformLocation(program, "projectionMatrix");
+    return u;
+}
+
