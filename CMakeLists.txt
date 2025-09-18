@@ -75,6 +75,13 @@ elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/textures/roughness_map.png)
   set(ROUGHNESS_MAP_TEX ${CMAKE_CURRENT_SOURCE_DIR}/textures/roughness_map.png)
 endif()
 
+# hdr texture
+if(EXISTS ${SRC_DIR}/textures/test.hdr)
+  set(BASE_COLOR_TEX ${SRC_DIR}/textures/test.hdr)
+elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/textures/test.hdr)
+  set(BASE_COLOR_TEX ${CMAKE_CURRENT_SOURCE_DIR}/textures/test.hdr)
+endif()
+
 
 if(TEX)
   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

@@ -28,6 +28,7 @@ GLuint baseColorTextureID;
 GLuint normalMapTextureID;
 GLuint roughnessTextureID;
 GLuint metallicTextureID;
+GLuint hdrTextureID;
 
 // ─────────────────────────────────────────────
 // Main
@@ -86,7 +87,11 @@ int main() {
     normalMapTextureID = LoadTexture2D("textures/normal_map.png");
     roughnessTextureID = LoadTexture2D("textures/roughness_map.png");
     
-    
+    hdrTextureID = LoadHDRTexture("textures/test.hdr"); // use .hdr
+    GLuint envCubemap = EquirectToCubemap(hdrTextureID, 0, 0, 512);
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+    // later bind envCubemap to your IBL shaders
+
 
     // ---- Material and Lighting Setup -----
     LightingUniforms lightUniforms = getLightingUniforms(shader_program);

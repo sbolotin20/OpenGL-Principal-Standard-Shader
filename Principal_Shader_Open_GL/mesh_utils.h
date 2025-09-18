@@ -39,3 +39,4 @@ struct Mesh {
 void ComputeTangents(std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices); // calculate tangent vectors for each vertex to support nomal mapping
 Mesh createQuad();
 Mesh createMesh(); // generic function for any obj passed in 
+void renderCube();
