@@ -19,11 +19,16 @@ Mesh createMesh(const std::vector<Vertex>& vertices, const std::vector<unsigned 
     
     // VBO
     glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO); // bind the buffer (target = array buffer)
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 
+        vertices.size() * sizeof(Vertex), 
+        vertices.data(), GL_STATIC_DRAW);
+    
 
     // EBO
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.EBO); // bind the buffer (target = array buffer)
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            indices.size() * sizeof(unsigned int),   // not sizeof(Vertex)
+            indices.data(), GL_STATIC_DRAW);
 
 
     // position attribute (location = 0)

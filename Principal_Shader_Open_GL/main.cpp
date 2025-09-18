@@ -91,6 +91,20 @@ int main() {
     GLuint envCubemap = EquirectToCubemap(hdrTextureID, 0, 0, 512);
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     // later bind envCubemap to your IBL shaders
+    // compile skybox program once
+    std::string sbVS = ReadTextFile("shaders/skybox.vert");
+    std::string sbFS = ReadTextFile("shaders/skybox.frag");
+    GLuint sbV = CompileShader(GL_VERTEX_SHADER, sbVS.c_str());
+    GLuint sbF = CompileShader(GL_FRAGMENT_SHADER, sbFS.c_str());
+    GLuint sbProg = LinkProgram(sbV, sbF);
+    glUseProgram(sbProg);
+    glUniform1i(glGetUniformLocation(sbProg, "env"), 0);
+    GLint sbView = glGetUniformLocation(sbProg, "view");
+    GLint sbProj = glGetUniformLocation(sbProg, "projection");
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    int width, height; glfwGetFramebufferSize(window, &width, &height);
+    glViewport(0, 0, w, h);
 
 
     // ---- Material and Lighting Setup -----
@@ -179,6 +193,23 @@ int main() {
         glUniformMatrix4fv(vertUniforms.modelMatrix, 1, GL_FALSE, glm::value_ptr(model));
         glUniformMatrix4fv(vertUniforms.viewMatrix, 1, GL_FALSE, glm::value_ptr(view));
 
+        glm::mat4 R = glm::rotate(glm::mat4(1.0f), time * 0.25f, glm::vec3(0,1,0));     // yaw
+        R = glm::rotate(R, 0.3f * sin(time * 0.2f), glm::vec3(1,0,0));                   // gentle pitch
+        glm::mat4 viewSky = glm::mat4(glm::mat3(view * R));                           // strip translation
+
+        // draw skybox from envCubemap
+        glDepthFunc(GL_LEQUAL);
+        glUseProgram(sbProg);             // your existing view matrix
+        glUniformMatrix4fv(sbView, 1, GL_FALSE, glm::value_ptr(viewSky));
+        glUniformMatrix4fv(sbProj, 1, GL_FALSE, glm::value_ptr(projection));
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+        renderCube();
+        glDepthFunc(GL_LESS);
+
+        glfwGetFramebufferSize(window, &w, &h);
+        glViewport(0, 0, w, h);
+
         mesh.draw(); 
 
         glfwSwapBuffers(window);
@@ -192,6 +223,7 @@ int main() {
     glDeleteTextures(1, &normalMapTextureID);
     glDeleteTextures(1, &roughnessTextureID);
     glDeleteTextures(1, &metallicTextureID);
+    glDeleteTextures(1, &hdrTextureID);
     glDeleteVertexArrays(1, &mesh.VAO);
     glfwTerminate();
 
