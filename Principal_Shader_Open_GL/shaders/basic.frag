@@ -27,7 +27,7 @@ uniform bool      useBaseColorTex;
 uniform vec3      baseColorTint;  // rgb tint in linear space (0..1)
 
 // -- Normal Mapping --
-uniform sampler2D normalMapTex;
+uniform sampler2D uNormalTex;
 uniform bool uUseNormalTex;
 
 // -- Roughness and Metallic Texture Maps -- different value at each pixel
@@ -35,6 +35,10 @@ uniform sampler2D roughnessMap;
 uniform bool useRoughnessMap;
 uniform sampler2D metallicMap;
 uniform bool useMetallicMap;
+
+// IBL
+uniform samplerCube irradianceMap;
+uniform bool useIBL;
 
 float D_GGX(float NdotH, float roughness) {
     float alpha = roughness * roughness;
@@ -86,8 +90,8 @@ void main()
     
     if (uUseNormalTex) {
         // Decode normal map from [0,1] to [-1,1]
-        vec3 normalSample = texture(normalMapTex, texCoord).rgb * 2.0 - 1.0;
-        normalSample *= 1.5;
+        vec3 normalSample = texture(uNormalTex, texCoord).rgb * 2.0 - 1.0;
+        normalSample *= 0.5;
         normalSample = normalize(normalSample);
         
         // Build TBN matrix to transform from tangent to world space
@@ -155,7 +159,7 @@ void main()
     
     // Energy conservation: kS = F, kD = 1 - kS
     vec3 kS = F;  // Specular contribution
-   vec3 kD = vec3(1.0) - kS;  // This is (1.0 - F)
+    vec3 kD = vec3(1.0) - kS;  // This is (1.0 - F)
     kD *= 1.0 - metallic;     // Remove diffuse from metals
     vec3 irradiance = uLight_Color * att * spot * NdotL; // incoming light energy
     vec3 Lo = (kD * baseColor / 3.14159265 + specular) * irradiance;
@@ -163,7 +167,13 @@ void main()
 
     
     // ========== FINAL COLOR ==========
-    vec3 ambient = baseColor * uAmbient;
+    vec3 ambient;
+    if (useIBL) {
+        vec3 irradiance = texture(irradianceMap, N).rgb;
+        ambient = kD * irradiance * baseColor;
+    } else {
+        ambient = baseColor * uAmbient;
+    }
     vec3 color = ambient + Lo;
 
     // ========== TONE MAPPING & GAMMA ==========

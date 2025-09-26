@@ -205,3 +205,76 @@ GLuint EquirectToCubemap(GLuint hdrTex, GLuint /*unused*/, GLuint /*unused*/, in
 
     return envCubemap;
 }
+
+GLuint ConvolveIrradiance(GLuint envCubemap) {
+    GLuint captureFBO, captureRBO;
+    glGenFramebuffers(1, &captureFBO);
+    glGenRenderbuffers(1, &captureRBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 32, 32);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, captureRBO);
+
+    GLuint irradianceMap;
+    glGenTextures(1, &irradianceMap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
+    for (int i = 0; i < 6; ++i)
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 32, 32, 0, GL_RGB, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // compile shaders
+    std::string vertexSource = ReadTextFile("shaders/cubemap_vertex.vert");  // Reuse existing
+    std::string fragSource = ReadTextFile("shaders/irradiance_convolution.frag");
+    GLuint vertex_shader = CompileShader(GL_VERTEX_SHADER, vertexSource.c_str());
+    GLuint frag_shader = CompileShader(GL_FRAGMENT_SHADER, fragSource.c_str());
+    GLuint program = LinkProgram(vertex_shader, frag_shader);
+    glUseProgram(program);
+
+    glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
+    glm::mat4 views[] = {
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))
+    };
+
+    // set uniforms
+    glUniform1i(glGetUniformLocation(program, "environmentMap"), 0);
+    glUniform1i(glGetUniformLocation(program, "irradianceMap"), 4);  // Texture unit 4
+    glUniform1i(glGetUniformLocation(program, "useIBL"), 1);  // Enable IBL
+    GLint loc_proj     = glGetUniformLocation(program, "projection");
+    GLint loc_view     = glGetUniformLocation(program, "view");
+    glUniformMatrix4fv(loc_proj, 1, GL_FALSE, glm::value_ptr(proj));
+
+    // bind HDR
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+
+    // Before rendering loop
+    glViewport(0, 0, 32, 32);
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+
+    // render into each irradianceMap face
+    for (int i = 0; i < 6; ++i) {
+        glUniformMatrix4fv(loc_view, 1, GL_FALSE, glm::value_ptr(views[i]));
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, irradianceMap, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        renderCube(); // your helper that binds its own VAO
+    }
+
+    // restore state
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return irradianceMap;
+    // Similar to EquirectToCubemap but:
+    // 1. Use envCubemap as input instead of HDR texture
+    // 2. Use irradiance_convolution.frag shader
+    // 3. Make it smaller (32x32 is enough for irradiance)
+    // 4. Bind envCubemap as samplerCube, not sampler2D
+}

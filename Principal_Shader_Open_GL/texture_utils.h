@@ -11,3 +11,4 @@
 GLuint LoadTexture2D(const std::string& path, bool generateMipmaps=true, bool flipY=true); // returns GL texture id
 GLuint LoadHDRTexture(const std::string& path);
 GLuint EquirectToCubemap(GLuint hdrTex, GLuint cubeVAO, GLuint cubeVBO, int size = 512);
+GLuint ConvolveIrradiance(GLuint envCubemap);
