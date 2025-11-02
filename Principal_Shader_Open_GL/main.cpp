@@ -21,6 +21,9 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include "ImGuiFileDialog.h"
+using IGFD::FileDialogConfig;   // keep this once, near your includes
+
 
 // ─────────────────────────────────────────────
 // Window Settings
@@ -34,6 +37,21 @@ GLuint normalMapTextureID;
 GLuint roughnessTextureID;
 GLuint metallicTextureID;
 GLuint hdrTextureID;
+
+static void Reload2D(GLuint &tex, const std::string& path) {
+    if (tex) glDeleteTextures(1, &tex);
+    tex = LoadTexture2D(path);
+}
+static void ReloadHDR(GLuint &hdrTex, GLuint &envCubemap, GLuint &irradianceMap, const std::string& path) {
+    if (hdrTex) glDeleteTextures(1, &hdrTex);
+    hdrTex = LoadHDRTexture(path);
+    if (envCubemap) glDeleteTextures(1, &envCubemap);
+    envCubemap = EquirectToCubemap(hdrTex, 0, 0, 512);
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+    if (irradianceMap) glDeleteTextures(1, &irradianceMap);
+    irradianceMap = ConvolveIrradiance(envCubemap);
+}
+
 
 // ─────────────────────────────────────────────
 // Main
@@ -76,6 +94,8 @@ int main() {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
 
+    // ----- Initialize L2DFileDialog
+
     // Setup Platform/Renderer bindings
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
@@ -110,14 +130,14 @@ int main() {
     std::cout << "Cube mesh created - VAO: " << mesh.VAO << ", Index count: " << mesh.indexCount << std::endl;
 
     // ---- Load Textures -----
-    // baseColorTextureID = LoadTexture2D("textures/base_color.jpg");
-    // normalMapTextureID = LoadTexture2D("textures/normal_map.png");
-    // roughnessTextureID = LoadTexture2D("textures/roughness_map.png");
+    baseColorTextureID = LoadTexture2D("textures/base_color.jpg");
+    normalMapTextureID = LoadTexture2D("textures/normal_map.png");
+    roughnessTextureID = LoadTexture2D("textures/roughness_map.png");
 
-    baseColorTextureID = LoadTexture2D("textures/Metal_color.png");
-    normalMapTextureID = LoadTexture2D("textures/Metal_NormalGL.png");
-    roughnessTextureID = LoadTexture2D("textures/Metal_Roughness.png");
-    metallicTextureID = LoadTexture2D("textures/Metal_Metalness.png");
+    // baseColorTextureID = LoadTexture2D("textures/Metal_color.png");
+    // normalMapTextureID = LoadTexture2D("textures/Metal_NormalGL.png");
+    // roughnessTextureID = LoadTexture2D("textures/Metal_Roughness.png");
+    // metallicTextureID = LoadTexture2D("textures/Metal_Metalness.png");
     
     std::cout << "Texture IDs - Base: " << baseColorTextureID 
               << ", Normal: " << normalMapTextureID 
@@ -220,8 +240,98 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+
+
         // ----- ImGui Controls -----
         ImGui::Begin("PBR Material Controls");
+
+        ImGui::Separator();
+        ImGui::Text("Load Texture Maps");
+        // --- File pickers ---
+        if (ImGui::Button("Load Base Color")) {
+            FileDialogConfig cfg; 
+            cfg.path = ".";                   // start folder
+            cfg.countSelectionMax = 1;
+            cfg.flags = ImGuiFileDialogFlags_Modal;
+            ImGuiFileDialog::Instance()->OpenDialog(
+                "PickBase", "Choose Base Color",
+                "Image files{.png,.jpg,.jpeg,.bmp,.tga}", cfg);
+        }
+
+        if (ImGui::Button("Load Normal")) {
+            FileDialogConfig cfg; cfg.path = "."; cfg.countSelectionMax = 1; cfg.flags = ImGuiFileDialogFlags_Modal;
+            ImGuiFileDialog::Instance()->OpenDialog(
+                "PickNormal", "Choose Normal Map",
+                "Image files{.png,.jpg,.jpeg,.bmp,.tga}", cfg);
+        }
+
+        if (ImGui::Button("Load Roughness")) {
+            FileDialogConfig cfg; cfg.path = "."; cfg.countSelectionMax = 1; cfg.flags = ImGuiFileDialogFlags_Modal;
+            ImGuiFileDialog::Instance()->OpenDialog(
+                "PickMetallic", "Choose Roughness Map",
+                "Image files{.png,.jpg,.jpeg,.bmp,.tga}", cfg);
+        }
+
+        if (ImGui::Button("Load Metallic")) {
+            FileDialogConfig cfg; cfg.path = "."; cfg.countSelectionMax = 1; cfg.flags = ImGuiFileDialogFlags_Modal;
+            ImGuiFileDialog::Instance()->OpenDialog(
+                "PickRough", "Choose Metallic Map",
+                "Image files{.png,.jpg,.jpeg,.bmp,.tga}", cfg);
+        }
+
+        // --- Handle results ---
+        if (ImGuiFileDialog::Instance()->Display("PickBase")) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string path = ImGuiFileDialog::Instance()->GetFilePathName();
+                Reload2D(baseColorTextureID, path);
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+        if (ImGuiFileDialog::Instance()->Display("PickNormal")) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string path = ImGuiFileDialog::Instance()->GetFilePathName();
+                Reload2D(normalMapTextureID, path);
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+        if (ImGuiFileDialog::Instance()->Display("PickRough")) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string path = ImGuiFileDialog::Instance()->GetFilePathName();
+                Reload2D(roughnessTextureID, path);
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+        if (ImGuiFileDialog::Instance()->Display("PickMetallic")) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string path = ImGuiFileDialog::Instance()->GetFilePathName();
+                Reload2D(metallicTextureID, path);
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+
+        ImGui::Separator();
+        if (ImGui::Checkbox("Use Base Color Texture", &useBaseColorTex)) {
+            glUseProgram(shader_program);
+            glUniform1i(matUniforms.uUseBaseTex, useBaseColorTex ? 1 : 0);
+        }
+        if (ImGui::Checkbox("Use Normal Map", &useNormalMap)) {
+            glUseProgram(shader_program);
+            glUniform1i(matUniforms.uUseNormalTex, useNormalMap ? 1 : 0);
+        }
+        if (ImGui::Checkbox("Use Roughness Map", &useRoughnessMap)) {
+            glUseProgram(shader_program);
+            glUniform1i(matUniforms.uUseRoughnessMap, useRoughnessMap ? 1 : 0);
+        }
+        // if (ImGui::Checkbox("Use Metallic Map", &usem)) {
+        //     glUseProgram(shader_program);
+        //     glUniform1i(matUniforms.uUseRoughnessMap, useRoughnessMap ? 1 : 0);
+        // }
+        if (ImGui::Checkbox("Use IBL", &useIBL)) {
+            glUseProgram(shader_program);
+            glUniform1i(glGetUniformLocation(shader_program, "useIBL"), useIBL ? 1 : 0);
+        }
+
+
 
         ImGui::Text("Material Properties");
         if (ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f)) {
@@ -253,25 +363,7 @@ int main() {
             glUniform3f(lightUniforms.uLightColor, lightColor[0] * lightIntensity, lightColor[1] * lightIntensity, lightColor[2] * lightIntensity);
         }
 
-        ImGui::Separator();
-        ImGui::Text("Texture Maps");
-        if (ImGui::Checkbox("Use Base Color Texture", &useBaseColorTex)) {
-            glUseProgram(shader_program);
-            glUniform1i(matUniforms.uUseBaseTex, useBaseColorTex ? 1 : 0);
-        }
-        if (ImGui::Checkbox("Use Normal Map", &useNormalMap)) {
-            glUseProgram(shader_program);
-            glUniform1i(matUniforms.uUseNormalTex, useNormalMap ? 1 : 0);
-        }
-        if (ImGui::Checkbox("Use Roughness Map", &useRoughnessMap)) {
-            glUseProgram(shader_program);
-            glUniform1i(matUniforms.uUseRoughnessMap, useRoughnessMap ? 1 : 0);
-        }
-        if (ImGui::Checkbox("Use IBL", &useIBL)) {
-            glUseProgram(shader_program);
-            glUniform1i(glGetUniformLocation(shader_program, "useIBL"), useIBL ? 1 : 0);
-        }
-
+        
         ImGui::End();
 
         // ----- Render Main Object -----

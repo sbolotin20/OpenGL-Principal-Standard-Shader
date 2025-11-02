@@ -19,10 +19,12 @@ set(IMGUI_SRC
   ${IMGUI_DIR}/imgui_widgets.cpp
   ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
   ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+  ${IMGUI_DIR}/ImGuiFileDialog.cpp
 )
 if(EXISTS "${IMGUI_DIR}/imgui_demo.cpp")
   list(APPEND IMGUI_SRC ${IMGUI_DIR}/imgui_demo.cpp)
 endif()
+
 
 add_executable(${PROJECT_NAME}
   ${SRC_DIR}/main.cpp
@@ -58,3 +60,12 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${SRC_DIR}/textures $<TARGET_FILE_DIR:${PROJECT_NAME}>/textures)
+
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+  IMGUI_IMPL_OPENGL_LOADER_GLAD
+  GLFW_INCLUDE_NONE
+  USE_STD_FILESYSTEM=1        # <- switch ImGuiFileDialog to std::filesystem
+  NOMINMAX
+  _CRT_SECURE_NO_WARNINGS
+)
