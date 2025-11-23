@@ -1,7 +1,13 @@
 // mesh_utils.cpp
 #include "mesh_utils.h"
+#include "External/tinyobjloader/tiny_obj_loader.h"
 #include <glad/glad.h>
 #include <cstddef>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <iostream>
+#include <filesystem>
 
 
 Mesh createMesh(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices) {
@@ -266,6 +272,81 @@ Mesh createCube() {
         // Top face
         20, 21, 22,   22, 23, 20
     };
+
+    ComputeTangents(vertices, indices);
+    return createMesh(vertices, indices);
+}
+
+Mesh loadObjModel(const std::string& path) {
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string warn, err;
+
+    bool success = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, path.c_str());
+
+    if (!warn.empty()) std::cout << "tinyobj warning: " << warn << std::endl;
+    if (!err.empty()) std::cerr << "tinyobj error: " << err << std::endl;
+    if (!success) {
+        std::cerr << "Failed to load OBJ: " << path << std::endl;
+        return createCube(); // fallback
+    }
+
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+
+    std::unordered_map<std::string, unsigned int> uniqueVertexMap;
+
+    for (const auto& shape : shapes) {
+        size_t index_offset = 0;
+        for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
+            int fv = shape.mesh.num_face_vertices[f];
+            for (int v = 0; v < fv; v++) {
+                tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
+
+                glm::vec3 pos = {
+                    attrib.vertices[3 * idx.vertex_index + 0],
+                    attrib.vertices[3 * idx.vertex_index + 1],
+                    attrib.vertices[3 * idx.vertex_index + 2]
+                };
+
+                glm::vec3 normal = glm::vec3(0.0f);
+                if (idx.normal_index >= 0 && !attrib.normals.empty()) {
+                    normal = {
+                        attrib.normals[3 * idx.normal_index + 0],
+                        attrib.normals[3 * idx.normal_index + 1],
+                        attrib.normals[3 * idx.normal_index + 2]
+                    };
+                }
+
+                glm::vec2 uv = glm::vec2(0.0f);
+                if (idx.texcoord_index >= 0 && !attrib.texcoords.empty()) {
+                    uv = {
+                        attrib.texcoords[2 * idx.texcoord_index + 0],
+                        attrib.texcoords[2 * idx.texcoord_index + 1]
+                    };
+                }
+
+                Vertex vert;
+                vert.position = pos;
+                vert.normal = normal;
+                vert.texCoord = uv;
+                vert.tangent = glm::vec3(0.0f); // to be calculated
+
+                std::string key = std::to_string(idx.vertex_index) + "/" +
+                                  std::to_string(idx.normal_index) + "/" +
+                                  std::to_string(idx.texcoord_index);
+
+                if (uniqueVertexMap.count(key) == 0) {
+                    uniqueVertexMap[key] = static_cast<unsigned int>(vertices.size());
+                    vertices.push_back(vert);
+                }
+
+                indices.push_back(uniqueVertexMap[key]);
+            }
+            index_offset += fv;
+        }
+    }
 
     ComputeTangents(vertices, indices);
     return createMesh(vertices, indices);

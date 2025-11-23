@@ -33,6 +33,7 @@ add_executable(${PROJECT_NAME}
   ${SRC_DIR}/texture_utils.cpp
   ${SRC_DIR}/uniforms.cpp
   ${EXT_DIR}/glad.c
+  ${EXT_DIR}/tinyobjloader/tiny_obj_loader.cc 
   ${IMGUI_SRC}
 )
 
@@ -40,6 +41,15 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${SRC_DIR}
   ${EXT_DIR}
   ${EXT_DIR}/include
+  ${IMGUI_DIR}
+  ${IMGUI_DIR}/backends
+)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+  ${SRC_DIR}
+  ${EXT_DIR}
+  ${EXT_DIR}/include
+  ${EXT_DIR}/tinyobjloader      # <--- Add this line
   ${IMGUI_DIR}
   ${IMGUI_DIR}/backends
 )

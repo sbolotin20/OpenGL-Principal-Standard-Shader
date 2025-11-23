@@ -24,8 +24,10 @@ GLint uNormalTex;
 GLint uUseNormalTex;
 GLint uRoughnessMap;
 GLint uMetallicMap;
+GLint uAOMap;
 GLint uUseRoughnessMap;
 GLint uUseMetallicMap;
+GLint uUseAOMap;
 };
 
 struct VertexUniforms {

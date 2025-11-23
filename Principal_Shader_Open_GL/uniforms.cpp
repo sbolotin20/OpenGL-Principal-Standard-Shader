@@ -28,9 +28,11 @@ MaterialUniforms getMaterialUniforms(GLuint program) {
     u.uNormalTex = glGetUniformLocation(program, "uNormalTex");
     u.uUseNormalTex = glGetUniformLocation(program, "uUseNormalTex");
     u.uRoughnessMap = glGetUniformLocation(program, "roughnessMap");
+    u.uAOMap = glGetUniformLocation(program, "aoMap");
     u.uMetallicMap = glGetUniformLocation(program, "metallicMap");
     u.uUseRoughnessMap = glGetUniformLocation(program, "useRoughnessMap");
     u.uUseMetallicMap = glGetUniformLocation(program, "useMetallicMap");
+    u.uUseAOMap = glGetUniformLocation(program, "useAOMap");
     return u;
 }
 

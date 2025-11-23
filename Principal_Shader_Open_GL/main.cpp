@@ -9,9 +9,21 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+
+float cameraZoom = 5.0f;
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+    cameraZoom -= static_cast<float>(yoffset);
+    if (cameraZoom < 1.0f)
+        cameraZoom = 1.0f;
+    if (cameraZoom > 50.0f)
+        cameraZoom = 50.0f;
+}
+
 #include <glm/gtc/type_ptr.hpp>
 
 #include "External/stb_image.h"
+#include "External/tinyobjloader/tiny_obj_loader.h"
 #include "shader_utils.h"
 #include "texture_utils.h"
 #include "mesh_utils.h"
@@ -37,6 +49,7 @@ GLuint normalMapTextureID;
 GLuint roughnessTextureID;
 GLuint metallicTextureID;
 GLuint hdrTextureID;
+GLuint aoTextureID;
 
 static void Reload2D(GLuint &tex, const std::string& path) {
     if (tex) glDeleteTextures(1, &tex);
@@ -51,6 +64,36 @@ static void ReloadHDR(GLuint &hdrTex, GLuint &envCubemap, GLuint &irradianceMap,
     if (irradianceMap) glDeleteTextures(1, &irradianceMap);
     irradianceMap = ConvolveIrradiance(envCubemap);
 }
+
+// ---- Mouse Controls ----
+float pitch = 0.0f;
+float yaw = 0.0f;
+bool dragging = false;
+double lastX = 0.0, lastY = 0.0;
+
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        dragging = (action == GLFW_PRESS);
+        glfwGetCursorPos(window, &lastX, &lastY); // reset origin when drag starts
+    }
+}
+
+void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
+    if (dragging) {
+        float dx = static_cast<float>(xpos - lastX);
+        float dy = static_cast<float>(ypos - lastY);
+
+        yaw   += dx * 0.3f; // sensitivity
+        pitch += dy * 0.3f;
+
+        // clamp pitch to prevent flipping
+        pitch = glm::clamp(pitch, -89.0f, 89.0f);
+
+        lastX = xpos;
+        lastY = ypos;
+    }
+}
+
 
 
 // ─────────────────────────────────────────────
@@ -72,11 +115,15 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "PBR Shader Tool", NULL, NULL);
+    glfwSetScrollCallback(window, scroll_callback);
     if (window == NULL) {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
         return -1;
     }
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
+    glfwSetCursorPosCallback(window, cursor_position_callback);
+
     glfwMakeContextCurrent(window);
     
     // ----- Load OpenGL functions with GLAD -----
@@ -125,23 +172,27 @@ int main() {
         std::cout << "Main shader program linked successfully!" << std::endl;
     }
 
-    // ----- Set up Cube Geometry -----
-    Mesh mesh = createCube();
-    std::cout << "Cube mesh created - VAO: " << mesh.VAO << ", Index count: " << mesh.indexCount << std::endl;
-
+    // set up object geometry
+    Mesh currentMesh;
+    bool usingCustomMesh = false;
+    if (std::filesystem::exists("model.obj")) {
+        currentMesh = loadObjModel("model.obj");
+        usingCustomMesh = true;
+    } else {
+        currentMesh = createCube();
+    }
     // ---- Load Textures -----
-    baseColorTextureID = LoadTexture2D("textures/base_color.jpg");
-    normalMapTextureID = LoadTexture2D("textures/normal_map.png");
-    roughnessTextureID = LoadTexture2D("textures/roughness_map.png");
-
-    // baseColorTextureID = LoadTexture2D("textures/Metal_color.png");
-    // normalMapTextureID = LoadTexture2D("textures/Metal_NormalGL.png");
-    // roughnessTextureID = LoadTexture2D("textures/Metal_Roughness.png");
-    // metallicTextureID = LoadTexture2D("textures/Metal_Metalness.png");
+    baseColorTextureID = LoadTexture2D("textures/GoldPaint_BaseColor.jpg");
+    normalMapTextureID = LoadTexture2D("textures/GoldPaint_Normal.png");
+    roughnessTextureID = LoadTexture2D("textures/GoldPaint_Roughness.jpg");
+    metallicTextureID = LoadTexture2D("textures/GoldPaint_Metallic.jpg");
+    aoTextureID = LoadTexture2D("textures/GoldPaint_AmbientOcclusion.jpg");
     
     std::cout << "Texture IDs - Base: " << baseColorTextureID 
               << ", Normal: " << normalMapTextureID 
-              << ", Roughness: " << roughnessTextureID << std::endl;
+              << ", Roughness: " << roughnessTextureID
+              << ", Metallic: " << metallicTextureID
+              << ", AO: " << aoTextureID << std::endl;
     
     hdrTextureID = LoadHDRTexture("textures/test.hdr");
     std::cout << "HDR texture ID: " << hdrTextureID << std::endl;
@@ -188,6 +239,8 @@ int main() {
     static bool useBaseColorTex = true;
     static bool useNormalMap = true;
     static bool useRoughnessMap = true;
+    static bool useMetallicMap = false;
+    static bool useAOMap = false;
     static bool useIBL = true;
     static float exposure = 1.0f;
     static int currentToneMapping = 0;
@@ -206,7 +259,9 @@ int main() {
     glUniform1i(matUniforms.uRoughnessMap, 2);
     glUniform1i(matUniforms.uUseRoughnessMap, useRoughnessMap ? 1 : 0);
     glUniform1i(matUniforms.uMetallicMap, 3);
-    glUniform1i(matUniforms.uUseMetallicMap, 1);
+    glUniform1i(matUniforms.uUseMetallicMap, useMetallicMap ? 1 : 0);
+    glUniform1i(matUniforms.uAOMap, 4);
+    glUniform1i(matUniforms.uUseAOMap, useAOMap ? 1 : 0);
 
     glUniform1i(lightUniforms.uLightType, 0);
     glUniform3f(lightUniforms.uLightColor, lightColor[0] * lightIntensity, lightColor[1] * lightIntensity, lightColor[2] * lightIntensity);
@@ -245,6 +300,30 @@ int main() {
         // ----- ImGui Controls -----
         ImGui::Begin("PBR Material Controls");
 
+        ImGui::Text("Object Loader");
+        IGFD::FileDialogConfig config;
+        config.path = ".";
+        // IGFD::FileDialog::Instance()->OpenDialog("ChooseObj", "Choose Model", ".obj", config);
+
+        if (ImGui::Button("Choose Object")) {
+            FileDialogConfig cfg; 
+            cfg.path = ".";                   // start folder
+            cfg.countSelectionMax = 1;
+            cfg.flags = ImGuiFileDialogFlags_Modal;
+            ImGuiFileDialog::Instance()->OpenDialog(
+                "ChooseObj", "Choose Object",
+                ".obj", cfg);
+        }
+        if (ImGuiFileDialog::Instance()->Display("ChooseObj")) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string path = ImGuiFileDialog::Instance()->GetFilePathName();
+                currentMesh = loadObjModel(path);
+                usingCustomMesh = true;
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+        ImGui::Separator();
+
         ImGui::Separator();
         ImGui::Text("Load Texture Maps");
         // --- File pickers ---
@@ -268,14 +347,21 @@ int main() {
         if (ImGui::Button("Load Roughness")) {
             FileDialogConfig cfg; cfg.path = "."; cfg.countSelectionMax = 1; cfg.flags = ImGuiFileDialogFlags_Modal;
             ImGuiFileDialog::Instance()->OpenDialog(
-                "PickMetallic", "Choose Roughness Map",
+                "PickRough", "Choose Roughness Map",
                 "Image files{.png,.jpg,.jpeg,.bmp,.tga}", cfg);
         }
 
         if (ImGui::Button("Load Metallic")) {
             FileDialogConfig cfg; cfg.path = "."; cfg.countSelectionMax = 1; cfg.flags = ImGuiFileDialogFlags_Modal;
             ImGuiFileDialog::Instance()->OpenDialog(
-                "PickRough", "Choose Metallic Map",
+                "PickMetallic", "Choose Metallic Map",
+                "Image files{.png,.jpg,.jpeg,.bmp,.tga}", cfg);
+        }
+
+        if (ImGui::Button("Load AO")) {
+            FileDialogConfig cfg; cfg.path = "."; cfg.countSelectionMax = 1; cfg.flags = ImGuiFileDialogFlags_Modal;
+            ImGuiFileDialog::Instance()->OpenDialog(
+                "PickAO", "Choose Ambient Occlusion Map",
                 "Image files{.png,.jpg,.jpeg,.bmp,.tga}", cfg);
         }
 
@@ -309,6 +395,14 @@ int main() {
             ImGuiFileDialog::Instance()->Close();
         }
 
+        if (ImGuiFileDialog::Instance()->Display("PickAO")) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string path = ImGuiFileDialog::Instance()->GetFilePathName();
+                Reload2D(aoTextureID, path);
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+
         ImGui::Separator();
         if (ImGui::Checkbox("Use Base Color Texture", &useBaseColorTex)) {
             glUseProgram(shader_program);
@@ -322,10 +416,14 @@ int main() {
             glUseProgram(shader_program);
             glUniform1i(matUniforms.uUseRoughnessMap, useRoughnessMap ? 1 : 0);
         }
-        // if (ImGui::Checkbox("Use Metallic Map", &usem)) {
-        //     glUseProgram(shader_program);
-        //     glUniform1i(matUniforms.uUseRoughnessMap, useRoughnessMap ? 1 : 0);
-        // }
+        if (ImGui::Checkbox("Use Metallic Map", &useMetallicMap)) {
+            glUseProgram(shader_program);
+            glUniform1i(matUniforms.uUseMetallicMap, useMetallicMap ? 1 : 0);
+        }
+        if (ImGui::Checkbox("Use AO Map", &useAOMap)) {
+            glUseProgram(shader_program);
+            glUniform1i(glGetUniformLocation(shader_program, "useAOMap"), useAOMap ? 1 : 0);
+        }
         if (ImGui::Checkbox("Use IBL", &useIBL)) {
             glUseProgram(shader_program);
             glUniform1i(glGetUniformLocation(shader_program, "useIBL"), useIBL ? 1 : 0);
@@ -358,7 +456,7 @@ int main() {
             glUseProgram(shader_program);
             glUniform3f(lightUniforms.uLightColor, lightColor[0] * lightIntensity, lightColor[1] * lightIntensity, lightColor[2] * lightIntensity);
         }
-        if (ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 10.0f)) {
+        if (ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 100.0f)) {
             glUseProgram(shader_program);
             glUniform3f(lightUniforms.uLightColor, lightColor[0] * lightIntensity, lightColor[1] * lightIntensity, lightColor[2] * lightIntensity);
         }
@@ -380,12 +478,19 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, normalMapTextureID);
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, roughnessTextureID);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, metallicTextureID);
         glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, aoTextureID);  // Fix: 2D texture, not cubemap
+        glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
         
         // Set IBL uniforms
         glUniform1i(glGetUniformLocation(shader_program, "useIBL"), useIBL ? 1 : 0);
-        glUniform1i(glGetUniformLocation(shader_program, "irradianceMap"), 4);
+        glUniform1i(glGetUniformLocation(shader_program, "irradianceMap"), 5);
+        glUniform1i(glGetUniformLocation(shader_program, "environmentMap"), 6);
 
         // Update time-based lighting
         float time = glfwGetTime();
@@ -393,25 +498,40 @@ int main() {
         glm::vec3 animatedDir = glm::normalize(glm::vec3(0.0f, -cos(elev), sin(elev)));
         
         // Use manual light direction if being controlled, otherwise use animated
-        if (lightDir[0] == 0.0f && lightDir[1] == -0.7f && lightDir[2] == 0.3f) {
-            glUniform3f(lightUniforms.uDirDir, animatedDir.x, animatedDir.y, animatedDir.z);
-        }
+        // if (lightDir[0] == 0.0f && lightDir[1] == -0.7f && lightDir[2] == 0.3f) {
+        //     glUniform3f(lightUniforms.uDirDir, animatedDir.x, animatedDir.y, animatedDir.z);
+        // }
+
+        // Update camera position (add this line)
+        glUniform3f(lightUniforms.uCamPos, 0.0f, 0.0f, 5.0f);
+        // Force light direction pointing down at the surface
+        glUniform3f(lightUniforms.uDirDir, 1.0f, -1.0f, -1.0f);
 
         // Update matrices
-        glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(2.0f));
-        model = glm::rotate(model, time * 0.5f, glm::vec3(0.0f, 1.0f, 0.0f));
-        
-        glm::mat4 view = glm::lookAt(
-            glm::vec3(0.0f, 0.0f, 5.0f),
-            glm::vec3(0.0f, 0.0f, 0.0f),
-            glm::vec3(0.0f, 1.0f, 0.0f)
-        );
+        // glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(2.0f));
+        // model = glm::rotate(model, time * 0.5f, glm::vec3(0.0f, 1.0f, 0.0f));
 
+        // mouse movements
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::rotate(model, glm::radians(yaw), glm::vec3(0.0f, 1.0f, 0.0f));   // left-right
+        model = glm::rotate(model, glm::radians(pitch), glm::vec3(1.0f, 0.0f, 0.0f)); // up-down
+
+        
+        
+glm::mat4 view = glm::lookAt(
+    glm::vec3(0.0f, 0.0f, cameraZoom),
+    glm::vec3(0.0f, 0.0f, 0.0f),
+    glm::vec3(0.0f, 1.0f, 0.0f)
+);
+
+
+        // glUniformMatrix4fv(vertUniforms.modelMatrix, 1, GL_FALSE, glm::value_ptr(model));
         glUniformMatrix4fv(vertUniforms.modelMatrix, 1, GL_FALSE, glm::value_ptr(model));
+
         glUniformMatrix4fv(vertUniforms.viewMatrix, 1, GL_FALSE, glm::value_ptr(view));
 
         // Draw the cube
-        mesh.draw();
+        currentMesh.draw();
 
         // ----- Render Skybox -----
         glm::mat4 R = glm::rotate(glm::mat4(1.0f), time * 0.25f, glm::vec3(0,1,0));
@@ -444,10 +564,11 @@ int main() {
     glDeleteTextures(1, &normalMapTextureID);
     glDeleteTextures(1, &roughnessTextureID);
     glDeleteTextures(1, &metallicTextureID);
+    glDeleteTextures(1, &aoTextureID);
     glDeleteTextures(1, &hdrTextureID);
     glDeleteTextures(1, &envCubemap);
     glDeleteTextures(1, &irradianceMap);
-    mesh.cleanup();
+    currentMesh.cleanup();
     
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
